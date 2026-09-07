@@ -99,6 +99,10 @@ export const IKey = ({ size = 13, className }: P) =>
   S(size, <><circle cx="5" cy="8" r="2.4" /><path d="M7.4 8h6M11.5 8v2.2" /></>, className);
 
 /** Install — a download arrow. */
+/** Disclosure chevron. Points right; `.chev-open` rotates it down. */
+export const IChevron = ({ size = 14, className }: P) =>
+  S(size, <path d="M6.5 3.5 11 8l-4.5 4.5" />, className, 1.6);
+
 export const IDownload = ({ size = 14, className }: P) =>
   S(size, <path d="M8 3v7.5M4.8 7.6 8 10.8l3.2-3.2M3.5 13h9" />, className, 1.5);
 

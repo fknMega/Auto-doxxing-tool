@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { SENSITIVE_SUMMARY, type ModuleConfig, type ModuleSecret, type ModuleHeader, type ThemePref } from "../../shared/types";
 import { IPlus, ITrash, IEdit, IClose, ISearch, IKey, IDiscord, IHeart } from "./icons";
-import { ToolManager } from "./ToolManager";
+import { ModulesPane as ModulesPaneList } from "./ModulesPane";
 
 
 const MODELS = [
@@ -310,108 +310,11 @@ function ModelPane() {
   );
 }
 
-const KIND_LABEL: Record<string, string> = { builtin: "Built-in", command: "Command", http: "API", connector: "Connector" };
-
 function ModulesPane() {
-  const modules = useStore((s) => s.modules);
-  const toggleModule = useStore((s) => s.toggleModule);
-  const deleteModule = useStore((s) => s.deleteModule);
   const [editing, setEditing] = useState<ModuleConfig | null>(null);
-  const [showBundled, setShowBundled] = useState(false);
-  const [bundledFilter, setBundledFilter] = useState("");
-
-  const builtins = modules.filter((m) => m.kind === "builtin");
-  const bundled = modules.filter((m) => (m.kind === "command" || m.kind === "http") && m.default);
-  const customs = modules.filter((m) => (m.kind === "command" || m.kind === "http") && !m.default);
-  const connectors = modules.filter((m) => m.kind === "connector");
-  const bundledOn = bundled.filter((m) => m.enabled).length;
-  const q = bundledFilter.trim().toLowerCase();
-  const bundledShown = q ? bundled.filter((m) => m.name.toLowerCase().includes(q) || m.description.toLowerCase().includes(q)) : bundled;
-
-  const Row = (m: ModuleConfig) => {
-    const keys = m.secrets?.length ?? 0;
-    return (
-      <div className={`mod-row${m.enabled ? "" : " off"}`} key={m.id}>
-        <div className="minfo">
-          <div className="mtitle">
-            {m.name}
-            <span className="tag">{KIND_LABEL[m.kind] ?? m.kind}</span>
-            {keys > 0 && <span className="tag strong" title={`${keys} key${keys === 1 ? "" : "s"} stored`}><IKey size={11} />{keys}</span>}
-          </div>
-          <div className="mdesc" title={m.description}>{m.description}</div>
-        </div>
-        <div className="mod-acts">
-          {(m.kind === "command" || m.kind === "http") && (
-            <>
-              <button className="mini-btn" aria-label={`Edit ${m.name}`} title="Edit" onClick={() => setEditing(m)}><IEdit /></button>
-              {!m.default && <button className="mini-btn danger" aria-label={`Delete ${m.name}`} title="Delete" onClick={() => void deleteModule(m.id)}><ITrash /></button>}
-            </>
-          )}
-          {m.kind === "connector"
-            ? <span className="locked">code</span>
-            : <Switch on={m.enabled} label={`Enable ${m.name}`} onToggle={() => void toggleModule(m.id, !m.enabled)} />}
-        </div>
-      </div>
-    );
-  };
-
   return (
     <>
-      <div className="field">
-        <span className="flabel">Modules</span>
-        <div className="desc">Capabilities Aether can reach for. Toggle the built-ins and the bundled tools, or add your own — a local <b>command</b> Aether can run, or an <b>API</b> called with your keys. Each enabled module becomes a tool Aether uses when its description fits.</div>
-      </div>
-
-      <div className="sec">
-        <span>Command-line tools</span>
-        <span className="lead" />
-      </div>
-      <div className="desc">
-        Some bundled modules drive a program on your machine. A module whose program is missing
-        is a tool that always fails, so this is where you install them.
-      </div>
-      <ToolManager />
-
-      <div className="sec"><span>Built-in</span><span className="lead" /></div>
-      <div className="mod-list">{builtins.map(Row)}</div>
-
-      <div className="sec">
-        <span>Bundled tools</span>
-        <span className="lead" />
-        <span>{bundledOn} of {bundled.length} on</span>
-        <button className="btn ghost sm" aria-expanded={showBundled} onClick={() => setShowBundled((v) => !v)}>{showBundled ? "Hide" : "Show all"}</button>
-      </div>
-      <div className="desc">
-        Free, no-key OSINT and recon endpoints, plus wrappers for common CLI tools. The API ones work out of the box; the command ones need the tool installed and autonomy on.
-      </div>
-      {showBundled && (
-        <>
-          <div className="gsearch">
-            <ISearch size={14} />
-            <input aria-label="Filter bundled tools" placeholder="Filter bundled tools" value={bundledFilter} onChange={(e) => setBundledFilter(e.target.value)} />
-          </div>
-          {bundledShown.length === 0
-            ? <div className="desc">No bundled tool matches that.</div>
-            : <div className="mod-list">{bundledShown.map(Row)}</div>}
-        </>
-      )}
-
-      <div className="sec">
-        <span>Custom</span>
-        <span className="lead" />
-        <button className="btn ghost sm" onClick={() => setEditing(newModule())}>Add module</button>
-      </div>
-      {customs.length === 0
-        ? <div className="desc">No custom modules yet. Add a local command (for example <code>nesher</code>) or an API called with your key.</div>
-        : <div className="mod-list">{customs.map(Row)}</div>}
-
-      {connectors.length > 0 && (
-        <>
-          <div className="sec"><span>Connectors</span><span className="lead" /></div>
-          <div className="mod-list">{connectors.map(Row)}</div>
-        </>
-      )}
-
+      <ModulesPaneList onEdit={setEditing} onAdd={() => setEditing(newModule())} />
       {editing && <ModuleEditor initial={editing} onClose={() => setEditing(null)} />}
     </>
   );

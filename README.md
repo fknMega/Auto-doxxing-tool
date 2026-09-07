@@ -82,7 +82,7 @@ too: a face on a person, the site's favicon on an account, the photo itself on a
 <br/><br/>
 
 <img src="docs/media/modules.png" width="92%" alt="Modules" />
-<br/><em>Dozens of no-key OSINT and recon tools bundled in, plus your own commands and APIs. Flip on what you want.</em>
+<br/><em>One list, grouped by the question each capability answers. The switch says you want it — if it needs a program installed, turning it on installs that first.</em>
 
 <br/><br/>
 
@@ -104,10 +104,12 @@ an evidence log that is stored with the turn instead of vanishing when it finish
 **Light and dark, both first-class.** One palette, defined twice, with every pairing contrast-checked. The
 graph canvas reads from the same tokens as the DOM, so switching theme repaints it with no reload.
 
-**An install manager for the tools.** Roughly twenty bundled modules drive a command-line program — maigret,
-subfinder, nuclei, nmap and friends — and a module whose program is missing is a tool that always fails. Aether
-checks what's on your machine, installs the rest with whichever package manager you actually have (Homebrew,
-pipx, go install, gem), and streams the output while it works. First launch offers to do the lot in one click.
+**Modules that tell you the truth.** Roughly twenty bundled modules drive a command-line program — maigret,
+subfinder, nuclei, nmap and friends — and a module whose program is missing is a tool that always fails. So
+install state and enable state are one thing: the switch says you want a capability, and turning it on installs
+whatever it needs first, using whichever package manager you actually have (Homebrew, pipx, go install, gem).
+A module can no longer be switched on while its program is missing. First launch offers to do the lot in one
+click; it's recommended, not required, and it doesn't appear at all if there's nothing to install.
 
 Two things it will not do: run anything as root, or install without a click. When the only route needs `sudo`,
 you get the exact command to paste instead of a shrug. And because a GUI app inherits launchd's bare PATH

@@ -26,7 +26,6 @@ const SHOTS = [
   ["welcome",    "view=chat&empty=1"],
   ["modules",    "view=settings&tab=Modules"],
   ["providers",  "view=settings&tab=Model"],
-  ["tools",      "view=settings&tab=Modules"],
   ["setup",      "setup=1"],
 ];
 
@@ -56,6 +55,13 @@ async function main() {
       // Open a node's inspector for the detail shot. The preview bridge exposes
       // this hook precisely so a screenshot can reach a state that otherwise
       // needs a click at coordinates the layout decides.
+      if (name === "modules") {
+        await win.webContents.executeJavaScript(
+          `[...document.querySelectorAll('.group-head')].forEach(b => { if (/Domains|Scanning/.test(b.textContent)) b.click() }), null`,
+        ).catch(() => {});
+        await sleep(400);
+      }
+
       if (name === "graph-node") {
         await win.webContents.executeJavaScript(
           `window.__selectNode && window.__selectNode("fknmega"), null`,

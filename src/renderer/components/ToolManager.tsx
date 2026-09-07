@@ -79,7 +79,7 @@ function ToolRow({ tool, locked }: { tool: ToolStatus; locked: boolean }) {
 
 /** Live output while something is installing. Collapsed to the last few lines —
  *  this is a progress indicator, not a terminal. */
-function InstallLog() {
+export function InstallLog() {
   const log = useStore((s) => s.installLog);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight; }, [log.length]);
@@ -87,6 +87,45 @@ function InstallLog() {
   return (
     <div className="install-log" ref={ref} role="log" aria-label="Installer output">
       {log.slice(-40).map((line, i) => <div key={i}>{line}</div>)}
+    </div>
+  );
+}
+
+/** The readiness header: how much of the catalog is actually usable, plus the
+ *  one control that fixes the rest. Counts are passed in because the Modules
+ *  pane counts modules, while this file only knows about binaries. */
+export function InstallSummary({ readyCount, totalCount }: { readyCount: number; totalCount: number }) {
+  const tools = useStore((s) => s.tools);
+  const installingAll = useStore((s) => s.installingAll);
+  const installAll = useStore((s) => s.installAllTools);
+  const cancel = useStore((s) => s.cancelInstall);
+  const refresh = useStore((s) => s.refreshTools);
+  const [rechecking, setRechecking] = useState(false);
+
+  const missing = tools.filter((t) => t.state === "missing").length;
+  const blocked = tools.filter((t) => t.state === "unavailable").length;
+  const busy = installingAll || tools.some((t) => t.state === "installing");
+
+  const recheck = async () => { setRechecking(true); await refresh(); setRechecking(false); };
+
+  return (
+    <div className="tool-summary">
+      <div className="grow">
+        <div className="t">{readyCount} of {totalCount} ready</div>
+        <div className="s">
+          {missing > 0
+            ? `${missing} need a program installed${blocked ? `, ${blocked} need a command you run yourself` : ""}.`
+            : blocked > 0
+              ? `${blocked} need a command you run yourself.`
+              : "Everything is installed."}
+        </div>
+      </div>
+      {busy
+        ? <button className="btn ghost" onClick={() => void cancel()}><IStop size={11} /> Stop</button>
+        : <button className="btn ghost sm" disabled={rechecking} onClick={() => void recheck()}>{rechecking ? "Checking…" : "Recheck"}</button>}
+      {!busy && missing > 0 && (
+        <button className="btn primary" onClick={() => void installAll()}>Install {missing} missing</button>
+      )}
     </div>
   );
 }

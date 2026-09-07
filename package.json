@@ -1,6 +1,6 @@
 {
   "name": "aether",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "A clean, animated desktop AI agent that works a live knowledge graph \u2014 OSINT & authorized security research, on macOS and Windows.",
   "author": "the Aether contributors",
   "license": "MIT",

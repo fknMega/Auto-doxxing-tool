@@ -655,6 +655,41 @@ select { cursor: pointer; }
   content: ""; position: absolute; left: var(--sp-4); right: 0; bottom: 0; height: 1px; background: var(--separator);
 }
 .mod-row.off { opacity: 0.55; }
+/* A readiness gutter, mirroring .row > .gut which is scoped to .row only.
+   align-self keeps the glyph on the title line of a three-line row while the
+   switch stays vertically centred. */
+.mod-row > .gut {
+  flex: 0 0 var(--gutter); width: var(--gutter);
+  display: flex; justify-content: center; align-self: flex-start;
+  padding-top: 2px; color: var(--label-3);
+}
+.mod-row.ready > .gut  { color: var(--ok); }
+.mod-row.needs > .gut  { color: var(--warn); }
+.mod-row.broke > .gut  { color: var(--bad); }
+.mod-row.busy  > .gut  { color: var(--accent); animation: pulse 1.4s var(--ease) infinite; }
+/* Paused is NOT dimmed: .mod-row.off already means "switched off", and a paused
+   row's switch is ON. The two must not look alike. */
+.mod-row.paused > .gut { color: var(--label-4); }
+.mod-row.off:not(.needs):not(.broke) > .gut { color: var(--label-4); }
+
+/* App-generated status, distinct from .mdesc which is the module's own text. */
+.mmeta {
+  font-size: var(--fs-caption); line-height: 1.4; color: var(--label-3); margin-top: 3px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mmeta.warn { color: var(--warn); }
+.mmeta.bad { color: var(--bad); }
+
+/* Collapsible group header inside a .group card. */
+.mod-group { margin-bottom: var(--sp-4); }
+.group-head { font-weight: 590; }
+.group-head > .gut { color: var(--label-4); }
+.group-head svg { transition: transform var(--t-1) var(--ease); }
+.chev-open { transform: rotate(90deg); }
+
+/* Standalone search above a list, rather than inside the graph toolbar. */
+.gsearch.wide { flex: 1 1 auto; margin-bottom: var(--sp-3); }
+.gsearch.wide input { height: 36px; }
 .mod-row .minfo { flex: 1 1 auto; min-width: 0; }
 .mtitle { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-body); font-weight: 510; }
 .mdesc { font-size: var(--fs-foot); line-height: 1.4; color: var(--label-3); margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -830,5 +865,6 @@ select { cursor: pointer; }
     scroll-behavior: auto !important;
   }
   .caret { opacity: 1; }
+  .mod-row.busy > .gut, .tool-item.installing > .gut { animation: none; }
   .send-btn:hover:not(:disabled), .send-btn:active:not(:disabled), .btn:active:not(:disabled) { transform: none; }
 }

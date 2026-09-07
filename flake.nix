@@ -26,7 +26,7 @@
               node-gyp
               python3          # node-gyp needs it for any native rebuild
               electron
-            ] ++ lib.optionals stdenv.isLinux [
+            ] ++ lib.optionals stdenv.hostPlatform.isLinux [
               pkg-config
               # Chromium's runtime deps. Without these the window opens on a
               # missing-symbol crash rather than a useful error.
@@ -55,23 +55,26 @@
       # ── package ───────────────────────────────────────────────────────────
       #   nix build
       #
-      # npmDepsHash pins the whole dependency closure. It CANNOT be computed
-      # without running Nix, so it is left as a placeholder: run `nix build`
-      # once, and the error will print the correct hash to paste in here. Or
-      # generate it directly with:
-      #   nix run nixpkgs#prefetch-npm-deps -- package-lock.json
+      # The npm dependency closure is pinned by npmDepsHash below, and nixpkgs
+      # by flake.lock. Both are checked on every push by .github/workflows/nix.yml,
+      # so a stale hash shows up as a red build rather than as an issue report.
       packages = forAll (system: pkgs:
         let
           inherit (pkgs) lib stdenv;
           electron = pkgs.electron_33 or pkgs.electron;
         in
-        lib.optionalAttrs stdenv.isLinux {
+        lib.optionalAttrs stdenv.hostPlatform.isLinux {
           default = pkgs.buildNpmPackage rec {
             pname = "aether";
             version = (lib.importJSON ./package.json).version;
             src = self;
 
-            npmDepsHash = lib.fakeHash;   # <- replace after the first `nix build`
+            # Content hash of the npm dependency closure, derived from
+            # package-lock.json. Regenerate after ANY lock change with:
+            #   nix run nixpkgs#prefetch-npm-deps -- package-lock.json
+            # A wrong value fails the build loudly; it can never make Nix accept
+            # different content, because this is a fixed-output derivation.
+            npmDepsHash = "sha256-aK5OXBx/2d9dokpjzEQh57s6igzT9lrbkxF6lSCcyTg=";
 
             nativeBuildInputs = [ pkgs.makeWrapper pkgs.copyDesktopItems ];
 
