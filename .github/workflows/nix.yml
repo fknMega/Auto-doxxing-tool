@@ -43,7 +43,10 @@ jobs:
       # Catches a malformed flake, a bad lock, and evaluation errors before the
       # expensive build starts.
       - name: Check the flake evaluates
-        run: nix flake check --all-systems --no-build
+        # Deliberately NOT --all-systems: that evaluates the darwin outputs on a
+        # Linux runner, which fails on any package unavailable for that platform
+        # and tells you nothing about whether the flake works.
+        run: nix flake check --no-build
 
       # The real test: this is where npmDepsHash is exercised. A stale hash fails
       # here with "hash mismatch in fixed-output derivation" and prints the value

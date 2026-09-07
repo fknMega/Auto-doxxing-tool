@@ -7,6 +7,13 @@
     let
       systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       forAll = f: nixpkgs.lib.genAttrs systems (system: f system nixpkgs.legacyPackages.${system});
+      # nixpkgs-unstable renames and drops attributes without warning, and a
+      # single missing one fails the whole flake at evaluation. `pick` takes the
+      # first name that exists so a rename degrades instead of breaking.
+      pick = pkgs: names:
+        let found = builtins.filter (n: pkgs ? ${n}) names;
+        in if found == [] then null else pkgs.${builtins.head found};
+      pickList = pkgs: names: builtins.filter (p: p != null) (map (n: pick pkgs [ n ]) names);
     in
     {
       # ── dev shell ─────────────────────────────────────────────────────────
@@ -17,26 +24,30 @@
           # Electron's postinstall downloads a prebuilt binary from the network,
           # which is exactly what Nix is trying to avoid. Point the toolchain at
           # the electron in nixpkgs instead and skip the download entirely.
-          electron = pkgs.electron_33 or pkgs.electron;
+          electron = pick pkgs [ "electron_33" "electron_32" "electron" ];
         in
         {
           default = pkgs.mkShell {
-            packages = with pkgs; [
-              nodejs_22
-              node-gyp
-              python3          # node-gyp needs it for any native rebuild
+            # pick can return null if nixpkgs dropped every candidate name; a
+            # null in this list would fail evaluation, which is the exact thing
+            # the helper exists to prevent.
+            packages = builtins.filter (p: p != null) ([
+              (pick pkgs [ "nodejs_22" "nodejs_20" "nodejs" ])
+              pkgs.node-gyp
+              pkgs.python3     # node-gyp needs it for any native rebuild
               electron
-            ] ++ lib.optionals stdenv.hostPlatform.isLinux [
-              pkg-config
+            ] ++ lib.optionals stdenv.hostPlatform.isLinux (pickList pkgs [
               # Chromium's runtime deps. Without these the window opens on a
-              # missing-symbol crash rather than a useful error.
-              glib nss nspr atk at-spi2-atk at-spi2-core cups dbus
-              gtk3 pango cairo gdk-pixbuf libdrm libgbm libxkbcommon
-              alsa-lib expat systemd
-              xorg.libX11 xorg.libXcomposite xorg.libXdamage xorg.libXext
-              xorg.libXfixes xorg.libXrandr xorg.libxcb xorg.libXcursor
-              xorg.libXi xorg.libXrender xorg.libXtst
-            ];
+              # missing-symbol crash rather than a useful error. Names only —
+              # pickList drops any that this nixpkgs no longer carries.
+              "pkg-config"
+              "glib" "nss" "nspr" "atk" "at-spi2-atk" "at-spi2-core" "cups" "dbus"
+              "gtk3" "pango" "cairo" "gdk-pixbuf" "libdrm" "libgbm" "mesa"
+              "libxkbcommon" "alsa-lib" "expat" "systemd"
+            ]) ++ lib.optionals stdenv.hostPlatform.isLinux (with pkgs.xorg; [
+              libX11 libXcomposite libXdamage libXext libXfixes libXrandr
+              libxcb libXcursor libXi libXrender libXtst
+            ]));
 
             env = {
               ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
@@ -61,7 +72,7 @@
       packages = forAll (system: pkgs:
         let
           inherit (pkgs) lib stdenv;
-          electron = pkgs.electron_33 or pkgs.electron;
+          electron = pick pkgs [ "electron_33" "electron_32" "electron" ];
         in
         lib.optionalAttrs stdenv.hostPlatform.isLinux {
           default = pkgs.buildNpmPackage rec {
@@ -98,7 +109,7 @@
               makeWrapper ${electron}/bin/electron $out/bin/aether \
                 --add-flags $out/share/aether \
                 --set-default ELECTRON_IS_DEV 0 \
-                --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath [ pkgs.libgbm ]}"
+                --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath (pickList pkgs [ "libgbm" "mesa" ])}"
               runHook postInstall
             '';
 
@@ -121,7 +132,5 @@
             };
           };
         });
-
-      formatter = forAll (system: pkgs: pkgs.nixpkgs-fmt);
     };
 }
