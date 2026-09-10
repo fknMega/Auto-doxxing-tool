@@ -767,6 +767,15 @@ select { cursor: pointer; }
   background: var(--bg); border-radius: var(--r-lg); box-shadow: var(--shadow-pop);
   animation: sheet var(--t-3) var(--ease);
 }
+/* In dark, --bg is pure black and the scrim darkens the page to nearly the
+   same value, so a shadow alone leaves the sheet with no visible edge. A
+   hairline gives it one; in light the shadow already does the work. */
+:root[data-theme="dark"] .modal,
+:root[data-theme="dark"] .onboard-card { border: 1px solid var(--separator); }
+/* Sheets with no cards inside them sit on --surface so they lift off the scrim.
+   The module editor and setup keep --bg, because their contents ARE cards and
+   would stop separating against it. */
+.modal.perm, .onboard-card { background: var(--surface); }
 @keyframes sheet { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: none; } }
 .onboard-card { width: 440px; padding: var(--sp-6); text-align: center; }
 .onboard-card h1 { font-size: var(--fs-title); font-weight: 700; letter-spacing: -0.02em; margin: 0 0 var(--sp-2); }
@@ -776,6 +785,31 @@ select { cursor: pointer; }
 .modal-head h2 { font-size: var(--fs-head); font-weight: 640; margin: 0; flex: 1 1 auto; }
 .modal-body { padding: var(--sp-4); overflow-y: auto; min-height: 0; flex: 1 1 auto; }
 .note { font-size: var(--fs-caption); color: var(--label-3); }
+
+/* ── permission prompt ───────────────────────────────────────────────────── */
+/* Above every other sheet: a blocked turn must not sit behind the setup sheet. */
+.perm-scrim { z-index: 80; }
+.modal.perm { width: 520px; }
+.perm-icon {
+  width: 32px; height: 32px; flex: 0 0 auto; border-radius: var(--r-sm);
+  display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent);
+}
+/* The exact thing being approved. Wraps rather than truncates — a decision made
+   on an ellipsis is not an informed one. */
+.perm-detail {
+  font-family: var(--font-mono); font-size: var(--fs-foot); line-height: 1.5;
+  color: var(--label); background: var(--surface-2);
+  border-radius: var(--r); padding: var(--sp-3) var(--sp-4);
+  margin-bottom: var(--sp-3); user-select: text;
+  white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow-y: auto;
+}
+.perm-remember {
+  display: flex; align-items: center; gap: var(--sp-2);
+  font-size: var(--fs-foot); color: var(--label-2);
+  padding: var(--sp-2) 0 0; cursor: pointer;
+}
+.perm-remember input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
 
 /* ── graph ───────────────────────────────────────────────────────────────── */
 .graph-view { position: relative; display: grid; grid-template-rows: var(--h-gtoolbar) minmax(0, 1fr); min-height: 0; }

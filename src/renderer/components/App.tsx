@@ -9,6 +9,7 @@ import { GraphView } from "../graph/GraphView";
 import { Settings } from "./Settings";
 import { Onboarding } from "./Onboarding";
 import { Setup } from "./Setup";
+import { PermissionPrompt } from "./PermissionPrompt";
 
 /** The only values the stylesheet has titlebar insets for. Stamping the raw
  *  value put `data-platform="undefined"` on <html> wherever the bridge does not
@@ -32,6 +33,7 @@ export function App() {
   const refreshModules = useStore((s) => s.refreshModules);
   const setUpdateStatus = useStore((s) => s.setUpdateStatus);
   const handleInstallProgress = useStore((s) => s.handleInstallProgress);
+  const pushPermission = useStore((s) => s.pushPermission);
 
   useEffect(() => {
     const platform = window.aether.platform;
@@ -43,7 +45,8 @@ export function App() {
     const off4 = window.aether.onModulesChanged(() => { void refreshModules(); });
     const off5 = window.aether.onUpdateStatus((st) => setUpdateStatus(st));
     const off6 = window.aether.onInstallProgress((p) => handleInstallProgress(p));
-    return () => { off1(); off2(); off3(); off4(); off5(); off6(); };
+    const off7 = window.aether.onPermissionRequest((req) => pushPermission(req));
+    return () => { off1(); off2(); off3(); off4(); off5(); off6(); off7(); };
   }, []);
 
   // Settings load asynchronously; until they arrive the OS appearance wins.
@@ -63,6 +66,7 @@ export function App() {
       <StatusLine />
       {auth && !auth.loggedIn && !dismissedAuthGate && <Onboarding />}
       {/* Sign-in comes first; setup is the next thing a new user sees. */}
+      <PermissionPrompt />
       {settings && !settings.setupDone && (!auth || auth.loggedIn || dismissedAuthGate) && <Setup />}
     </div>
   );

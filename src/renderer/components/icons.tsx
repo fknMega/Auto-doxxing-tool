@@ -100,6 +100,14 @@ export const IKey = ({ size = 13, className }: P) =>
 
 /** Install — a download arrow. */
 /** Disclosure chevron. Points right; `.chev-open` rotates it down. */
+/** A shell prompt. */
+export const ITerminal = ({ size = 14, className }: P) =>
+  S(size, <><rect x="2" y="3" width="12" height="10" rx="2" /><path d="M5 6.5 7 8l-2 1.5M8.5 10h3" /></>, className, 1.4);
+
+/** The open internet. */
+export const IGlobe = ({ size = 14, className }: P) =>
+  S(size, <><circle cx="8" cy="8" r="5.5" /><path d="M2.5 8h11M8 2.5c1.6 1.7 2.4 3.6 2.4 5.5S9.6 12.3 8 13.5C6.4 11.8 5.6 9.9 5.6 8S6.4 4.2 8 2.5z" /></>, className, 1.3);
+
 export const IChevron = ({ size = 14, className }: P) =>
   S(size, <path d="M6.5 3.5 11 8l-4.5 4.5" />, className, 1.6);
 

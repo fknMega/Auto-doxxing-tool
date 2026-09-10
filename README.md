@@ -81,6 +81,11 @@ too: a face on a person, the site's favicon on an account, the photo itself on a
 
 <br/><br/>
 
+<img src="docs/media/permission.png" width="92%" alt="Aether asking to run a shell command" />
+<br/><em>At the default access level, Aether asks. The exact command is shown in full — never truncated — because a decision made on an ellipsis is not an informed one.</em>
+
+<br/><br/>
+
 <img src="docs/media/modules.png" width="92%" alt="Modules" />
 <br/><em>One list, grouped by the question each capability answers. The switch says you want it — if it needs a program installed, turning it on installs that first.</em>
 
@@ -103,6 +108,17 @@ an evidence log that is stored with the turn instead of vanishing when it finish
 
 **Light and dark, both first-class.** One palette, defined twice, with every pairing contrast-checked. The
 graph canvas reads from the same tokens as the DOM, so switching theme repaints it with no reload.
+
+**Three access levels, and one of them asks.** *Safe* is collection only — search, recon, the graph, and
+reading public pages, with no shell, no file writes and no installing. *Full* removes every prompt. The default
+is *Ask*: Aether can reach for the shell, fetch a URL it picked, or install a bundled tool it needs, and each
+request goes to you with the exact command or URL shown in full. Refusing is an answer — it says what it would
+have done and carries on. "Don't ask again" lasts for the session and is never written to disk, and changing
+the level retires any grant made under the old one.
+
+Approval answers *may Aether run a command*, not *may it go anywhere*. The workspace fence, the credential
+deny-list and the OS sandbox all still apply to an approved command — the levels decide what it can reach for,
+not whether the boundary holds.
 
 **Modules that tell you the truth.** Roughly twenty bundled modules drive a command-line program — maigret,
 subfinder, nuclei, nmap and friends — and a module whose program is missing is a tool that always fails. So

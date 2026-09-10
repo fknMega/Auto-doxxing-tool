@@ -3,8 +3,17 @@ export interface ToolContext {
   timezone: string;
   /** Broadcast to the renderer so the graph view refreshes live as a case grows. */
   notifyGraphChanged: (caseName: string) => void;
-  /** Live autonomy flag — command modules and shell are withheld in safe mode. */
+  /** Live capability flag — command modules and the shell are withheld only at
+   *  access level "safe". At "ask" the approval prompt is the gate. */
   isAutonomous: () => boolean;
+  /** Put a decision in front of the operator. Resolves true only on an explicit
+   *  allow; no window, no answer, or a timeout all resolve false. */
+  requestPermission: (req: {
+    kind: "shell" | "write" | "network" | "install";
+    title: string;
+    detail: string;
+    reason?: string;
+  }) => Promise<boolean>;
 }
 
 export const text = (t: string, isError = false) => ({

@@ -13,6 +13,7 @@ import { exifTools } from "./exif";
 import { imageTools } from "./image";
 import { usernameTools } from "./username";
 import { buildModuleTools } from "./customModules";
+import { installTools } from "./install";
 
 type SdkTool = ReturnType<typeof tool<any>>;
 
@@ -53,6 +54,9 @@ export async function buildToolList(ctx: ToolContext): Promise<{ tools: SdkTool[
     ...(modules.isBuiltinEnabled("recon") ? netTools() : []),
     ...(modules.isBuiltinEnabled("exif") ? exifTools() : []),
     ...(modules.isBuiltinEnabled("reverse_image") ? imageTools() : []),
+    // Asking for a missing program is always available; the permission policy
+    // decides whether the request reaches the operator or is refused outright.
+    ...installTools(ctx),
     ...buildModuleTools(ctx),
   ];
   const priv = await loadPrivateConnectors(ctx);
@@ -71,7 +75,8 @@ export async function buildToolServer(ctx: ToolContext) {
       "Aether's collection tools. graph_upsert/graph_get maintain the operator's live knowledge graph — " +
       "the primary workspace, updated as selectors are found and resolved. username_search hunts a handle " +
       "across platforms; dns_lookup/whois/http_probe do infrastructure recon; exif_read pulls image " +
-      "metadata; reverse_image_urls builds reverse-image searches.",
+      "metadata; reverse_image_urls builds reverse-image searches. tool_status reports which command-line " +
+      "programs are installed, and install_tool asks the operator to install a missing one.",
     tools,
   });
 

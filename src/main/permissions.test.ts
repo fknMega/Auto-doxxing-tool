@@ -10,13 +10,38 @@ import { homedir, tmpdir } from "node:os";
 import { makePolicy } from "./permissions.ts";
 
 const WORKSPACE = join(tmpdir(), "aether-test-workspace");
-const ctx = (autonomous: boolean) => ({ isAutonomous: () => autonomous, roots: () => [WORKSPACE] });
+
+/** `autonomous` maps to the old boolean: false = safe, true = full. The ask
+ *  level gets its own tests below, where the answer is the thing under test. */
+const ctx = (autonomous: boolean) => ({
+  access: () => (autonomous ? "full" as const : "safe" as const),
+  roots: () => [WORKSPACE],
+});
 
 const ask = async (autonomous: boolean, tool: string, input: Record<string, unknown>) => {
   const policy = makePolicy(ctx(autonomous));
   // The SDK passes an options bag the policy does not read; a cast keeps the
   // test honest about that rather than faking a whole control-request envelope.
   return policy(tool, input, {} as never);
+};
+
+/** Run one call at access level "ask" with a scripted operator. Returns the
+ *  decision plus every request that was put in front of them. */
+const withOperator = async (
+  answer: boolean | "no-surface",
+  tool: string,
+  input: Record<string, unknown>,
+) => {
+  const seen: Array<{ kind: string; title: string; detail: string }> = [];
+  const policy = makePolicy({
+    access: () => "ask",
+    roots: () => [WORKSPACE],
+    ...(answer === "no-surface" ? {} : {
+      ask: async (req) => { seen.push(req); return answer; },
+    }),
+  });
+  const res = await policy(tool, input, {} as never);
+  return { behavior: res?.behavior, seen };
 };
 
 // canUseTool is typed to allow returning null ("no opinion"); this policy never
@@ -119,4 +144,80 @@ test("Aether's own MCP tools are not path-scanned", async () => {
 
 test("prose containing a slash is not mistaken for a path", async () => {
   assert.ok(await allowed(true, "WebSearch", { query: "who owns example.com / registrar history" }));
+});
+
+
+// ── access level "ask" ───────────────────────────────────────────────────────
+// The whole point of this level is that nothing happens without a human. These
+// assert the two directions that matter: an approval runs it, and everything
+// else — refusal, no answer, no window — does not.
+
+test("ask: an approved shell command runs, and the operator saw the command", async () => {
+  const { behavior, seen } = await withOperator(true, "Bash", { command: "subfinder -d example.com" });
+  assert.equal(behavior, "allow");
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].kind, "shell");
+  assert.match(seen[0].detail, /subfinder -d example\.com/,
+    "the operator must be shown the actual command, not just the tool name");
+});
+
+test("ask: a refused request is denied", async () => {
+  const { behavior } = await withOperator(false, "Bash", { command: "rm -rf ." });
+  assert.equal(behavior, "deny");
+});
+
+test("ask: with no approval surface it fails closed", async () => {
+  // No window means nobody to ask. Silence is not consent.
+  const { behavior } = await withOperator("no-surface", "Bash", { command: "echo hi" });
+  assert.equal(behavior, "deny");
+});
+
+test("ask: fetching a model-chosen URL is a decision, and shows the URL", async () => {
+  const { behavior, seen } = await withOperator(true, "mcp__aether__http_probe", { url: "https://example.com/x" });
+  assert.equal(behavior, "allow");
+  assert.equal(seen[0].kind, "network");
+  assert.match(seen[0].detail, /example\.com/);
+});
+
+test("ask: a module the operator enabled does not prompt on every call", async () => {
+  // The operator already decided by enabling the module, and its endpoint is
+  // fixed in its own config — the model picks the input, never the destination.
+  const { behavior, seen } = await withOperator(true, "mcp__aether__github_user", { input: "torvalds" });
+  assert.equal(behavior, "allow");
+  assert.equal(seen.length, 0);
+});
+
+test("ask: installing is its own decision and names what would be installed", async () => {
+  const { behavior, seen } = await withOperator(true, "mcp__aether__install_tool", { module: "def:subfinder" });
+  assert.equal(behavior, "allow");
+  assert.equal(seen[0].kind, "install");
+  assert.match(seen[0].detail, /subfinder/);
+});
+
+test("safe mode refuses installing, but still reads public URLs", async () => {
+  // Safe mode never prompts: a capability is either absent or plain. Installing
+  // changes the machine, so it is absent. Reading a public page is collection —
+  // the thing safe mode exists to allow — and http_probe already refuses
+  // loopback and private address space on its own.
+  assert.ok(await denied(false, "mcp__aether__install_tool", { module: "def:nmap" }));
+  assert.ok(await allowed(false, "mcp__aether__http_probe", { url: "https://example.com" }));
+});
+
+test("full access installs and fetches without a prompt", async () => {
+  const seen: unknown[] = [];
+  const policy = makePolicy({
+    access: () => "full",
+    roots: () => [WORKSPACE],
+    ask: async () => { seen.push(1); return true; },
+  });
+  assert.equal((await policy("mcp__aether__install_tool", { module: "def:nmap" }, {} as never))?.behavior, "allow");
+  assert.equal((await policy("mcp__aether__http_probe", { url: "https://example.com" }, {} as never))?.behavior, "allow");
+  assert.equal(seen.length, 0, "full access must not prompt");
+});
+
+test("an approved shell command is still fenced to the workspace", async () => {
+  // Approval answers "may Aether run a command", not "may it leave the
+  // workspace". The path checks run after the gate, not instead of it.
+  const { behavior } = await withOperator(true, "Bash", { command: "cat ~/.ssh/id_rsa" });
+  assert.equal(behavior, "deny");
 });

@@ -33,6 +33,7 @@
 import { isAbsolute, resolve, relative, sep, normalize } from "node:path";
 import { homedir } from "node:os";
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
+import type { AccessLevel, PermissionRequest } from "../shared/types";
 
 const HOME = homedir();
 
@@ -110,13 +111,37 @@ const SHELL_RED_FLAGS: Array<[RegExp, string]> = [
 ];
 
 export interface PolicyContext {
-  /** Live read of the autonomy setting — it can change between turns. */
-  isAutonomous(): boolean;
+  /** Live read of the access level — it can change between turns. */
+  access(): AccessLevel;
   /** Directories the agent may touch. Normally just the workspace. */
   roots(): string[];
   /** Called when something is refused, so the UI can say so. */
   onDenied?(toolName: string, reason: string): void;
+  /** Put a decision in front of the operator. Resolves true to allow.
+   *  Only called at access level "ask"; "safe" refuses and "full" allows
+   *  without ever reaching here. */
+  ask?(req: Omit<PermissionRequest, "id">): Promise<boolean>;
 }
+
+/** MCP tools that reach the network at a URL THE MODEL CHOSE. Bundled modules
+ *  are deliberately not here: the operator enabled that module and its endpoint
+ *  is fixed in its config, so the model picks the input, never the destination.
+ *  What needs consent is Aether choosing where to connect. */
+const MODEL_CHOSEN_NETWORK = new Set([
+  "mcp__aether__http_probe",
+  "WebFetch",
+  "WebSearch",
+]);
+
+/** Asking to install something is its own category — it mutates the machine
+ *  outside the workspace, which nothing else here is allowed to do. */
+const INSTALL_TOOLS = new Set(["mcp__aether__install_tool"]);
+
+const first = (input: unknown, ...keys: string[]): string => {
+  const o = (input ?? {}) as Record<string, unknown>;
+  for (const k of keys) if (typeof o[k] === "string" && o[k]) return o[k] as string;
+  return "";
+};
 
 /** Every string in a tool's input, at any depth — the model can put a path in
  *  a field we do not know about, so we check them all rather than a known list. */
@@ -141,20 +166,75 @@ function checkPath(raw: string, roots: string[]): string | null {
 export function makePolicy(ctx: PolicyContext): CanUseTool {
   return async (toolName, input) => {
     const roots = ctx.roots();
+    const level = ctx.access();
     const refuse = (why: string): PermissionResult => {
       ctx.onDenied?.(toolName, why);
       return deny(why);
     };
+
+    /** Gate one capability by access level. `safe` refuses, `full` allows,
+     *  `ask` puts it in front of the operator and waits. */
+    const gate = async (
+      kind: PermissionRequest["kind"],
+      title: string,
+      detail: string,
+      refusal: string,
+      /** What "safe" does. Most capabilities are absent at that level; reading a
+       *  public URL is not, because collection is the whole point of safe mode. */
+      inSafeMode: "refuse" | "allow" = "refuse",
+    ): Promise<PermissionResult | null> => {
+      if (level === "full") return null;                 // null = carry on to the other checks
+      if (level === "safe") return inSafeMode === "allow" ? null : refuse(refusal);
+      if (!ctx.ask) return refuse(refusal);              // no approval surface: fail closed
+      const ok = await ctx.ask({ kind, title, detail });
+      return ok ? null : refuse(`You declined: ${title.toLowerCase()}.`);
+    };
+
+    // Installing changes the machine outside the workspace. It is always a
+    // decision, never a default, and it is refused outright in safe mode.
+    if (INSTALL_TOOLS.has(toolName)) {
+      const what = first(input, "module", "moduleId", "name", "tool");
+      const g = await gate(
+        "install", "Install a tool", what || "a bundled tool",
+        "Safe mode is on, so Aether cannot install anything. Set Access to Ask or Full in Settings.",
+      );
+      if (g) return g;
+      return allow();
+    }
+
+    // A URL the model chose, rather than an endpoint the operator configured.
+    if (MODEL_CHOSEN_NETWORK.has(toolName)) {
+      const url = first(input, "url", "query", "q", "target");
+      // Safe mode still reads public URLs: http_probe is read-only and already
+      // refuses loopback and private address space, and collecting from the
+      // open web is what safe mode is FOR. What "ask" adds is consent over
+      // where Aether connects, not a new capability.
+      const g = await gate(
+        "network", "Fetch from the internet", url || toolName,
+        "Aether cannot fetch that URL.",
+        "allow",
+      );
+      if (g) return g;
+      return allow();
+    }
 
     // Aether's own MCP tools carry their own guards (safe mode withholds the
     // shell inside customModules, http_probe refuses private address space).
     // They never take a filesystem path from the model.
     if (toolName.startsWith("mcp__")) return allow();
 
-    if (MUTATING.has(toolName) && !ctx.isAutonomous()) {
-      return refuse(
-        `Safe mode is on, so ${toolName} is withheld. Turn on Autonomy in Settings to let Aether run the shell and write files.`,
+    if (MUTATING.has(toolName)) {
+      const isShell = toolName === "Bash" || toolName === "BashOutput";
+      const detail = isShell
+        ? first(input, "command") || toolName
+        : first(input, "file_path", "path", "notebook_path") || toolName;
+      const g = await gate(
+        isShell ? "shell" : "write",
+        isShell ? "Run a shell command" : "Write to a file",
+        detail,
+        `Safe mode is on, so ${toolName} is withheld. Set Access to Ask or Full in Settings to let Aether run the shell and write files.`,
       );
+      if (g) return g;
     }
 
     // Bash is the one input we cannot parse into arguments, so it is inspected

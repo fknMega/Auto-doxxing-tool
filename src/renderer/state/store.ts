@@ -2,7 +2,7 @@ import { create } from "zustand";
 import type {
   AetherSettings, AuthStatus, Conversation, Message, ToolActivity,
   GraphCaseInfo, CaseGraph, OutboundImage, ModuleConfig, ProviderStatus, Provider, UpdateStatus,
-  ToolStatus, InstallProgress,
+  ToolStatus, InstallProgress, PermissionRequest,
 } from "../../shared/types";
 import type { ChatEventEnvelope } from "../../shared/ipc";
 
@@ -49,6 +49,10 @@ interface Store {
   /** True while an "install all" run is walking the catalog. */
   installingAll: boolean;
 
+  /** Decisions Aether is waiting on. A queue, not a single slot — a turn can
+   *  reach two gated calls before either is answered. */
+  permissions: PermissionRequest[];
+
   init(): Promise<void>;
   setView(v: View): void;
   dismissAuthGate(): void;
@@ -64,6 +68,9 @@ interface Store {
   checkForUpdate(): Promise<void>;
   installUpdate(): Promise<void>;
   setUpdateStatus(s: UpdateStatus): void;
+
+  pushPermission(req: PermissionRequest): void;
+  answerPermission(id: string, decision: "allow" | "deny", remember?: boolean): void;
 
   refreshTools(): Promise<void>;
   installTool(moduleId: string): Promise<void>;
@@ -113,6 +120,7 @@ export const useStore = create<Store>((set, get) => ({
   tools: [],
   installLog: [],
   installingAll: false,
+  permissions: [],
   providerStatus: null,
   updateStatus: null,
 
@@ -141,6 +149,13 @@ export const useStore = create<Store>((set, get) => ({
   async checkForUpdate() { set({ updateStatus: await A.checkForUpdate() }); },
   async installUpdate() { await A.installUpdate(); },
   setUpdateStatus(s) { set({ updateStatus: s }); },
+
+  pushPermission(req) { set({ permissions: [...get().permissions, req] }); },
+
+  answerPermission(id, decision, remember) {
+    A.answerPermission({ id, decision, remember });
+    set({ permissions: get().permissions.filter((p) => p.id !== id) });
+  },
 
   async refreshTools() { set({ tools: await A.toolStatuses() }); },
 

@@ -7,6 +7,7 @@ import type { AetherApi, ChatEventEnvelope, ConversationDetail, AttachmentPayloa
 import type {
   AetherSettings, AuthStatus, Conversation, Message, CaseGraph, GraphCaseInfo,
   GraphNode, GraphEdge, ChatRequest, AgentEvent, ModuleConfig, ToolStatus, InstallProgress,
+  PermissionRequest, PermissionReply,
 } from "../../shared/types";
 
 const q = new URLSearchParams(location.search);
@@ -29,7 +30,7 @@ let settings: AetherSettings = {
   model: "claude-opus-5",
   effort: "medium",
   personaVoice: "flirty",
-  autonomy: true,
+  access: (q.get("access") as AetherSettings["access"]) ?? "ask",
   provider: "claude",
   openaiBaseUrl: "https://api.openai.com/v1",
   openaiModel: "gpt-4o",
@@ -264,6 +265,17 @@ async function simulateTurn(req: ChatRequest) {
   const { turnId } = req;
   const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
   await wait(400);
+  // ?perm=shell|network|install raises a real approval request mid-turn, so the
+  // prompt can be exercised end to end in the preview. A refusal ends the turn,
+  // exactly as the policy would.
+  const demo = PERM_DEMO[q.get("perm") ?? ""];
+  if (demo) {
+    const okd = await askPreview(demo);
+    if (!okd) {
+      emit(turnId, { type: "error", message: `You declined: ${demo.title.toLowerCase()}.` });
+      return;
+    }
+  }
   // Reasoning arrives before any tool, so the "working" state is visible on its
   // own for a beat rather than only underneath a running tool.
   emit(turnId, { type: "thinking", text: "Three selectors, one of them a photo. Seed the case first, then sweep the handle, then read the EXIF." });
@@ -314,6 +326,18 @@ const TOOL_SEED: Array<[string, string, ToolStatus["state"]]> = [
 ];
 const toolState = new Map(TOOL_SEED.map(([id, bin, st]) => [id, { bin, state: st }]));
 let installCbs: Array<(p: InstallProgress) => void> = [];
+let permCbs: Array<(r: PermissionRequest) => void> = [];
+const permAnswers = new Map<string, boolean>();
+/** Preview only: raise a real approval prompt so the dialog can be exercised. */
+function askPreview(req: Omit<PermissionRequest, "id">): Promise<boolean> {
+  const id = "perm-" + Math.random().toString(36).slice(2);
+  permCbs.forEach((cb) => cb({ ...req, id }));
+  return new Promise((resolve) => {
+    const t = setInterval(() => {
+      if (permAnswers.has(id)) { clearInterval(t); resolve(permAnswers.get(id)!); permAnswers.delete(id); }
+    }, 120);
+  });
+}
 let stopAll = false;
 const emitInstall = (p: InstallProgress) => installCbs.forEach((cb) => cb(p));
 
@@ -344,6 +368,14 @@ async function fakeInstall(id: string): Promise<boolean> {
   emitInstall({ moduleId: id, state: "installed", line: `/opt/homebrew/bin/${st.bin}` });
   return true;
 }
+
+/** Preview only: ?perm=shell|network|install raises a real approval request the
+ *  first time a turn runs, so the prompt can be seen and answered. */
+const PERM_DEMO: Record<string, Omit<PermissionRequest, "id">> = {
+  shell: { kind: "shell", title: "Run a shell command", detail: "subfinder -d helio-labs.io -silent | httpx -silent -status-code -title", reason: "Enumerating subdomains for the open lead on helio-labs.io." },
+  network: { kind: "network", title: "Fetch from the internet", detail: "https://helio-labs.io/.well-known/security.txt", reason: "Checking for a published security contact." },
+  install: { kind: "install", title: "Install a tool", detail: "subfinder — brew install subfinder", reason: "The passive subdomain sweep needs it and it is not installed." },
+};
 
 const api: AetherApi = {
   platform: q.get("platform") ?? "darwin",
@@ -421,6 +453,9 @@ const api: AetherApi = {
     installCbs.push(cb);
     return () => { installCbs = installCbs.filter((c) => c !== cb); };
   },
+
+  onPermissionRequest: (cb) => { permCbs.push(cb); return () => { permCbs = permCbs.filter((c) => c !== cb); }; },
+  answerPermission: (reply: PermissionReply) => { permAnswers.set(reply.id, reply.decision === "allow"); },
 
   listModules: async () => redactMods(),
   saveModule: async (mod) => {

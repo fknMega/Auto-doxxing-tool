@@ -27,6 +27,7 @@ const SHOTS = [
   ["modules",    "view=settings&tab=Modules"],
   ["providers",  "view=settings&tab=Model"],
   ["setup",      "setup=1"],
+  ["permission", "view=chat&empty=1&perm=shell&ask=1"],
 ];
 
 /** The graph settles under a force simulation, so a fixed delay is the honest
@@ -62,6 +63,18 @@ async function main() {
         await sleep(400);
       }
 
+      // The approval prompt only exists mid-turn, so send one first.
+      if (name === "permission") {
+        await win.webContents.executeJavaScript(`(() => {
+          const ta = document.querySelector('.composer textarea');
+          const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+          set.call(ta, 'sweep helio-labs.io');
+          ta.dispatchEvent(new Event('input', { bubbles: true }));
+          setTimeout(() => document.querySelector('.send-btn')?.click(), 120);
+          return null;
+        })()`).catch(() => {});
+        await sleep(1600);
+      }
       if (name === "graph-node") {
         await win.webContents.executeJavaScript(
           `window.__selectNode && window.__selectNode("fknmega"), null`,

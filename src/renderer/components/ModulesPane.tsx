@@ -33,7 +33,7 @@ type Readiness =
   | { state: "paused"; note: string }
   | { state: "off" };
 
-function readinessOf(m: ModuleConfig, tool: ToolStatus | undefined, autonomy: boolean): Readiness {
+function readinessOf(m: ModuleConfig, tool: ToolStatus | undefined, canRunCommands: boolean): Readiness {
   const missingKey = (m.secrets ?? []).some((s) => !s.set);
   if (tool) {
     if (tool.state === "installing") return { state: "busy", note: "Installing…" };
@@ -47,7 +47,7 @@ function readinessOf(m: ModuleConfig, tool: ToolStatus | undefined, autonomy: bo
   }
   if (missingKey) return { state: "needs", note: "Needs a key before it will run." };
   // Installed and keyed, but the shell is off, so a command module cannot run.
-  if (m.kind === "command" && !autonomy) return { state: "paused", note: "Inert while Safe mode is on." };
+  if (m.kind === "command" && !canRunCommands) return { state: "paused", note: "Withheld at Safe access — switch to Ask or Full." };
   return m.enabled ? { state: "ready" } : { state: "off" };
 }
 
@@ -63,14 +63,14 @@ function ReadyGlyph({ r }: { r: Readiness }) {
 }
 
 function ModuleRow({
-  m, tool, autonomy, onEdit,
-}: { m: ModuleConfig; tool?: ToolStatus; autonomy: boolean; onEdit: (m: ModuleConfig) => void }) {
+  m, tool, canRunCommands, onEdit,
+}: { m: ModuleConfig; tool?: ToolStatus; canRunCommands: boolean; onEdit: (m: ModuleConfig) => void }) {
   const toggle = useStore((s) => s.toggleModule);
   const install = useStore((s) => s.installTool);
   const del = useStore((s) => s.deleteModule);
   const [copied, setCopied] = useState(false);
 
-  const r = readinessOf(m, tool, autonomy);
+  const r = readinessOf(m, tool, canRunCommands);
   const keys = m.secrets?.length ?? 0;
   const editable = m.kind === "command" || m.kind === "http";
 
@@ -151,7 +151,8 @@ function ModuleRow({
 export function ModulesPane({ onEdit, onAdd }: { onEdit: (m: ModuleConfig) => void; onAdd: () => void }) {
   const modules = useStore((s) => s.modules);
   const tools = useStore((s) => s.tools);
-  const autonomy = useStore((s) => s.settings?.autonomy ?? false);
+  // Only Safe withholds command modules outright; at Ask the prompt is the gate.
+  const canRunCommands = useStore((s) => (s.settings?.access ?? "ask") !== "safe");
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Record<string, boolean>>({ custom: true, connector: true });
 
@@ -172,7 +173,7 @@ export function ModulesPane({ onEdit, onAdd }: { onEdit: (m: ModuleConfig) => vo
   }, [modules, q]);
 
   const total = modules.length;
-  const ready = modules.filter((m) => readinessOf(m, toolBy.get(m.id), autonomy).state === "ready").length;
+  const ready = modules.filter((m) => readinessOf(m, toolBy.get(m.id), canRunCommands).state === "ready").length;
 
   return (
     <>
@@ -205,7 +206,7 @@ export function ModulesPane({ onEdit, onAdd }: { onEdit: (m: ModuleConfig) => vo
         const expanded = q ? true : (open[g.key] ?? false);
         const on = list.filter((m) => m.enabled).length;
         const needs = list.filter((m) => {
-          const st = readinessOf(m, toolBy.get(m.id), autonomy).state;
+          const st = readinessOf(m, toolBy.get(m.id), canRunCommands).state;
           return st === "needs" || st === "broke";
         }).length;
 
@@ -225,7 +226,7 @@ export function ModulesPane({ onEdit, onAdd }: { onEdit: (m: ModuleConfig) => vo
               </span>
             </button>
             {expanded && list.map((m) => (
-              <ModuleRow key={m.id} m={m} tool={toolBy.get(m.id)} autonomy={autonomy} onEdit={onEdit} />
+              <ModuleRow key={m.id} m={m} tool={toolBy.get(m.id)} canRunCommands={canRunCommands} onEdit={onEdit} />
             ))}
           </div>
         );

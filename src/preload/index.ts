@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { IPC } from "../shared/ipc";
 import type { AetherApi, ChatEventEnvelope } from "../shared/ipc";
-import type { InstallProgress } from "../shared/types";
+import type { InstallProgress, PermissionRequest } from "../shared/types";
 import type { ChatRequest, AetherSettings } from "../shared/types";
 
 const api: AetherApi = {
@@ -31,6 +31,13 @@ const api: AetherApi = {
     ipcRenderer.on(IPC.installProgress, h);
     return () => ipcRenderer.removeListener(IPC.installProgress, h);
   },
+
+  onPermissionRequest: (cb) => {
+    const h = (_e: unknown, req: PermissionRequest) => cb(req);
+    ipcRenderer.on(IPC.permissionRequest, h);
+    return () => ipcRenderer.removeListener(IPC.permissionRequest, h);
+  },
+  answerPermission: (reply) => ipcRenderer.send(IPC.permissionReply, reply),
 
   listModules: () => ipcRenderer.invoke(IPC.modulesList),
   saveModule: (mod) => ipcRenderer.invoke(IPC.moduleSave, mod),

@@ -125,7 +125,11 @@ export interface AetherSettings {
   model: string;
   effort: "low" | "medium" | "high" | "xhigh" | "max";
   personaVoice: "flirty" | "professional";
-  autonomy: boolean;
+  /** Legacy, kept so an existing settings.json still loads; `access` is the
+   *  live value and is derived from this on first run after upgrading. */
+  autonomy?: boolean;
+  /** What Aether may do without asking. See AccessLevel. */
+  access: AccessLevel;
 
   provider: Provider;
   /** OpenAI-compatible endpoint + model (ChatGPT, or any compatible gateway). */
@@ -146,6 +150,37 @@ export interface AetherSettings {
   /** False until the first-run setup has been shown and dismissed or completed.
    *  Setup offers to install the command-line tools the bundled modules wrap. */
   setupDone: boolean;
+}
+
+/**
+ * What Aether is allowed to do on this machine.
+ *
+ *  safe — collection only. No shell, no file writes, no installing, and no
+ *         fetching a URL the model picked. The bundled search/recon/graph tools
+ *         still work; this is the floor, not a broken app.
+ *  ask  — Aether may request any of those, one at a time, and you approve or
+ *         refuse each. The default: capable, but nothing happens behind you.
+ *  full — no prompts. Everything safe-mode withholds is simply allowed.
+ */
+export type AccessLevel = "safe" | "ask" | "full";
+
+/** One thing Aether wants to do that needs a decision. */
+export interface PermissionRequest {
+  id: string;
+  kind: "shell" | "write" | "network" | "install";
+  /** One line, in plain language: "Run a shell command". */
+  title: string;
+  /** The specific thing — the command, the URL, the tool name. */
+  detail: string;
+  /** Why it wants to, when we can tell. */
+  reason?: string;
+}
+
+export interface PermissionReply {
+  id: string;
+  decision: "allow" | "deny";
+  /** Allow every request of this kind for the rest of the session. */
+  remember?: boolean;
 }
 
 /** The three states of the appearance control. */

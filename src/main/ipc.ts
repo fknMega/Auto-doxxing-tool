@@ -6,6 +6,7 @@ import { paths, runtime, loadSettings } from "./config";
 import { store } from "./store";
 import { modules } from "./modules";
 import { toolStatuses, installTool, installMissing, cancelInstall, toolFor } from "./installer";
+import { setDelivery, resolvePermission, cancelAllPermissions, clearSessionGrants, requestPermission } from "./approvals";
 import { runTurn, resetToolServer } from "./agent";
 import { buildToolList } from "./tools";
 import { runChatTurn, listOllamaModels } from "./chatEngine";
@@ -34,7 +35,10 @@ const toolCtx: ToolContext = {
   notifyGraphChanged: (caseName) => broadcast(IPC.graphChanged, { caseName }),
   // Reads the live setting each turn (the tool server is cached, so this closure
   // is how safe mode reaches command modules without a rebuild).
-  isAutonomous: () => settings.autonomy,
+  // "safe" is the only level that withholds the shell outright; at "ask" the
+  // permission prompt is what gates it, not this flag.
+  isAutonomous: () => (settings.access ?? "ask") !== "safe",
+  requestPermission: (req) => requestPermission(req),
 };
 
 /** After any module change: rebuild the tool server next turn and tell the UI. */
@@ -96,7 +100,7 @@ function sanitizeSettings(patch: Partial<AetherSettings>): Partial<AetherSetting
   if (typeof patch.model === "string") out.model = patch.model.slice(0, 120);
   if (["low", "medium", "high", "xhigh", "max"].includes(patch.effort as string)) out.effort = patch.effort;
   if (patch.personaVoice === "flirty" || patch.personaVoice === "professional") out.personaVoice = patch.personaVoice;
-  if (typeof patch.autonomy === "boolean") out.autonomy = patch.autonomy;
+  if (["safe", "ask", "full"].includes(patch.access as string)) out.access = patch.access;
   if (typeof patch.autoUpdate === "boolean") out.autoUpdate = patch.autoUpdate;
   if (["system", "light", "dark"].includes(patch.theme as string)) out.theme = patch.theme;
   if (typeof patch.setupDone === "boolean") out.setupDone = patch.setupDone;
@@ -167,13 +171,22 @@ async function providerStatus(): Promise<ProviderStatus> {
 }
 
 export function registerIpc(): void {
+  // The renderer is the approval surface. Without a window there is nobody to
+  // ask, and requestPermission denies rather than assuming.
+  setDelivery((req) => broadcast(IPC.permissionRequest, req));
+  ipcMain.on(IPC.permissionReply, (_e, reply) => resolvePermission(reply));
+
   // When the pref is `system`, the OS can flip under us at any time.
   nativeTheme.on("updated", () => { if ((settings.theme ?? "system") === "system") applyTheme("system"); });
 
   ipcMain.handle(IPC.settingsGet, () => settings);
   ipcMain.handle(IPC.settingsSet, (_e, patch: Partial<AetherSettings>) => {
+    const prevAccess = settings.access;
     settings = { ...settings, ...sanitizeSettings(patch) };
     saveSettings();
+    // A "don't ask again" grant was made under the old policy. Changing the
+    // policy retires it rather than letting it carry across.
+    if (settings.access !== prevAccess) clearSessionGrants();
     // Keep the OS chrome (window frame, native menus, scrollbars) in step with
     // the palette the renderer is about to paint.
     applyTheme(settings.theme);
@@ -276,7 +289,12 @@ export function registerIpc(): void {
     return ok;
   });
 
-  ipcMain.handle(IPC.chatCancel, (_e, turnId: string) => { activeTurns.get(turnId)?.abort(); });
+  ipcMain.handle(IPC.chatCancel, (_e, turnId: string) => {
+    activeTurns.get(turnId)?.abort();
+    // Anything the turn was waiting on is dropped and denied — an answer must
+    // never land against a question from a turn that is already gone.
+    cancelAllPermissions();
+  });
 
   ipcMain.handle(IPC.chatSend, async (_e, req: ChatRequest) => {
     const message = (req.message ?? "").trim();

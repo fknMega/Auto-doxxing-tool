@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
-import { SENSITIVE_SUMMARY, type ModuleConfig, type ModuleSecret, type ModuleHeader, type ThemePref } from "../../shared/types";
+import { SENSITIVE_SUMMARY, type ModuleConfig, type ModuleSecret, type ModuleHeader, type ThemePref, type AccessLevel } from "../../shared/types";
 import { IPlus, ITrash, IEdit, IClose, ISearch, IKey, IDiscord, IHeart } from "./icons";
 import { ModulesPane as ModulesPaneList } from "./ModulesPane";
 
@@ -20,6 +20,26 @@ const EFFORTS = [
 ] as const;
 const TABS = ["General", "Model", "Modules", "About"] as const;
 type Tab = (typeof TABS)[number];
+
+/** The three access levels, in increasing order of what Aether can do without
+ *  being asked. `ask` is the default: capable, but nothing happens behind you. */
+const ACCESS: { value: AccessLevel; label: string; headline: string; blurb: string }[] = [
+  {
+    value: "safe", label: "Safe",
+    headline: "Collection only",
+    blurb: "Search, recon and the graph. No shell, no file writes, no installing.",
+  },
+  {
+    value: "ask", label: "Ask",
+    headline: "Asks before it acts",
+    blurb: "Aether can request the shell, a URL, or installing a tool. You approve each one.",
+  },
+  {
+    value: "full", label: "Full",
+    headline: "No prompts",
+    blurb: "Everything Safe withholds is simply allowed. Aether reads untrusted pages — choose this deliberately.",
+  },
+];
 
 const THEMES: { value: ThemePref; label: string }[] = [
   { value: "system", label: "System" },
@@ -102,6 +122,7 @@ function GeneralPane() {
   };
 
   const theme = settings.theme ?? "system";
+  const access: AccessLevel = settings.access ?? "ask";
 
   return (
     <>
@@ -147,14 +168,29 @@ function GeneralPane() {
       </div>
 
       <div className="field">
-        <span className="flabel">Autonomy</span>
-        <div className="desc">Off by default. On, Aether can run shell commands and write files inside its workspace, and local-command modules become available. Commands run in an OS sandbox, reads cannot leave the workspace, and credentials stay off-limits either way — but a shell is still a shell, so turn this on deliberately.</div>
-        <div className="slab">
+        <span className="flabel">Access</span>
+        <div className="desc">
+          What Aether may do on this machine. Whatever you pick, commands run in an OS sandbox, reads cannot
+          leave its workspace, and your credentials stay off-limits — these levels decide what it can reach for,
+          not whether the boundary holds.
+        </div>
+        <div className="seg-pick" role="group" aria-label="Access level">
+          {ACCESS.map((a) => (
+            <button
+              key={a.value}
+              className={access === a.value ? "on" : ""}
+              aria-pressed={access === a.value}
+              onClick={() => void save({ access: a.value })}
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
+        <div className="slab" style={{ marginTop: "var(--sp-3)" }}>
           <div className="grow">
-            <div className="t">{settings.autonomy ? "Autonomy on" : "Safe mode"}</div>
-            <div className="s">{settings.autonomy ? "Sandboxed shell and workspace writes" : "No shell, no file writes"}</div>
+            <div className="t">{ACCESS.find((a) => a.value === access)?.headline}</div>
+            <div className="s">{ACCESS.find((a) => a.value === access)?.blurb}</div>
           </div>
-          <Switch on={settings.autonomy} label="Autonomy" onToggle={() => void save({ autonomy: !settings.autonomy })} />
         </div>
       </div>
     </>
@@ -386,7 +422,7 @@ function ModuleEditor({ initial, onClose }: { initial: ModuleConfig; onClose: ()
           {!isHttp ? (
             <div className="field">
               <label className="flabel" htmlFor="mod-cmd">Command</label>
-              <div className="desc tight">Runs in Aether's workspace (autonomy only). Use <code>{"{input}"}</code> (safely quoted) or the <code>$AETHER_INPUT</code> env var. Secrets below are exported as env vars.</div>
+              <div className="desc tight">Runs in Aether's workspace. Withheld at Safe access; at Ask you approve each run. Use <code>{"{input}"}</code> (safely quoted) or the <code>$AETHER_INPUT</code> env var. Secrets below are exported as env vars.</div>
               <textarea id="mod-cmd" className="ctl" rows={2} placeholder="nesher --json {input}" value={m.command ?? ""} onChange={(e) => set({ command: e.target.value })} />
             </div>
           ) : (
@@ -437,7 +473,7 @@ function ModuleEditor({ initial, onClose }: { initial: ModuleConfig; onClose: ()
           </div>
         </div>
         <div className="modal-foot">
-          <div className="note">{isHttp ? "Runs in safe mode and autonomy." : "Runs the shell — autonomy only."}</div>
+          <div className="note">{isHttp ? "Runs at every access level." : "Runs the shell — needs Ask or Full access."}</div>
           <span className="spacer" />
           <button className="btn ghost" onClick={onClose}>Cancel</button>
           <button className="btn primary" disabled={busy || !m.name.trim() || !m.description.trim()} onClick={save}>{busy ? "Saving…" : "Save module"}</button>
@@ -513,7 +549,7 @@ function AboutPane() {
         <span className="flabel">Security</span>
         <div className="desc">
           Command execution runs in an OS sandbox (Seatbelt on macOS, Bubblewrap on Linux). File reads cannot
-          leave Aether's workspace in any mode. These stay off-limits whether or not autonomy is on:
+          leave Aether's workspace in any mode. These stay off-limits at every access level:
         </div>
         <div className="mod-list">
           {SENSITIVE_SUMMARY.map((line) => (

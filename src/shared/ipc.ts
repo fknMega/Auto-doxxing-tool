@@ -5,7 +5,7 @@
 import type {
   AetherSettings, AuthStatus, ChatRequest, Conversation, Message,
   CaseGraph, GraphCaseInfo, AgentEvent, ModuleConfig, ProviderStatus, Provider, UpdateStatus,
-  ToolStatus, InstallProgress,
+  ToolStatus, InstallProgress, PermissionRequest, PermissionReply,
 } from "./types";
 
 export const IPC = {
@@ -22,6 +22,8 @@ export const IPC = {
   providerSetKey: "provider:setKey",
   providerLogin: "provider:login",
   providerLogout: "provider:logout",
+
+  permissionReply: "permission:reply",
 
   toolsStatus: "tools:status",
   toolInstall: "tools:install",
@@ -53,6 +55,7 @@ export const IPC = {
   conversationsChanged: "conversations:changed",
   modulesChanged: "modules:changed",
   installProgress: "tools:progress",
+  permissionRequest: "permission:request",
   updateStatus: "update:status",
 } as const;
 
@@ -108,6 +111,10 @@ export interface AetherApi {
   /** Stop an in-flight install (or the whole run, with no argument). */
   cancelInstall(moduleId?: string): Promise<void>;
   onInstallProgress(cb: (p: InstallProgress) => void): () => void;
+
+  /** Aether wants to do something that needs a decision. Reply with answerPermission. */
+  onPermissionRequest(cb: (req: PermissionRequest) => void): () => void;
+  answerPermission(reply: PermissionReply): void;
 
   /** Modules (secrets redacted — values never leave the main process). */
   listModules(): Promise<ModuleConfig[]>;

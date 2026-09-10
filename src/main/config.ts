@@ -51,10 +51,11 @@ const DEFAULT_SETTINGS: AetherSettings = {
   model: process.env.AETHER_MODEL ?? "claude-opus-5",
   effort: (process.env.AETHER_EFFORT as AetherSettings["effort"]) ?? "medium",
   personaVoice: "flirty",
-  // Off by default. Autonomy lets the agent run shell commands and write files;
-  // Aether ingests attacker-controlled text, so that is a decision the user
-  // makes deliberately, not one they inherit from a default.
-  autonomy: false,
+  // Capable, but never silent. Aether ingests attacker-controlled text for a
+  // living, so the shell, the network and installing are decisions the operator
+  // makes per request rather than ones they inherit from a default. "full"
+  // removes the prompts; "safe" removes the capabilities.
+  access: "ask",
 
   provider: (process.env.AETHER_PROVIDER as AetherSettings["provider"]) ?? "claude",
   openaiBaseUrl: process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
@@ -96,7 +97,14 @@ export function loadSettings(): AetherSettings {
   try {
     if (existsSync(paths.settingsFile)) {
       const raw = JSON.parse(readFileSync(paths.settingsFile, "utf8"));
-      return { ...DEFAULT_SETTINGS, ...raw };
+      const merged: AetherSettings = { ...DEFAULT_SETTINGS, ...raw };
+      // Upgrade path: `autonomy` was a boolean before access levels existed.
+      // Honour what the operator already chose rather than quietly widening or
+      // narrowing it — true meant "no prompts", false meant "collection only".
+      if (raw.access === undefined && typeof raw.autonomy === "boolean") {
+        merged.access = raw.autonomy ? "full" : "safe";
+      }
+      return merged;
     }
   } catch {
     /* fall through to defaults */

@@ -73,14 +73,15 @@ export async function* runTurn(
   const timeout = setTimeout(() => abort.abort(), runtime.turnTimeoutMs);
 
   const { server } = await toolServer(ctx);
-  if (settings.autonomy && process.platform === "win32" && !warnedNoSandbox) {
+  if (settings.access !== "safe" && process.platform === "win32" && !warnedNoSandbox) {
     warnedNoSandbox = true;
-    console.warn("[aether] autonomy is on and this platform has no sandbox backend — commands run with the policy in main/permissions.ts as the only boundary.");
+    console.warn("[aether] the shell is reachable and this platform has no sandbox backend — commands run with the policy in main/permissions.ts as the only boundary.");
   }
   const policy = makePolicy({
-    isAutonomous: ctx.isAutonomous,
+    access: () => settings.access ?? "ask",
     roots: () => [paths.workspace],
     onDenied: (tool, why) => console.warn(`[aether] refused ${tool}: ${why}`),
+    ask: ctx.requestPermission,
   });
   // Point the SDK at the real, unpacked binary. Its own resolution can land on
   // an app.asar path that the OS refuses to exec (ENOTDIR) in a packaged build.
@@ -125,7 +126,7 @@ export async function* runTurn(
         // warning below, which is worse, and is stated rather than hidden.
         sandbox: {
           enabled: true,
-          failIfUnavailable: settings.autonomy && process.platform !== "win32",
+          failIfUnavailable: settings.access !== "safe" && process.platform !== "win32",
           // Our canUseTool policy stays the decision-maker; the sandbox is the
           // floor under it, not a replacement for it.
           autoAllowBashIfSandboxed: false,
@@ -145,7 +146,7 @@ export async function* runTurn(
         // permissions by writing .claude/settings.json into its own workspace.
         // Belt and braces: in safe mode the mutating tools are not merely denied
         // at call time, they are removed from the model's context entirely.
-        ...(settings.autonomy ? {} : { disallowedTools: ["Bash", "Write", "Edit", "NotebookEdit"] }),
+        ...(settings.access === "safe" ? { disallowedTools: ["Bash", "Write", "Edit", "NotebookEdit"] } : {}),
         // The workspace is the only root. Relative paths resolve here, and the
         // policy refuses absolute paths that lead anywhere else.
         cwd: paths.workspace,
